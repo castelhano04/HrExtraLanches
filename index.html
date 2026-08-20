@@ -41,6 +41,73 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
 .offline{position:fixed;right:16px;bottom:16px;background:#fff4e5;color:#8a5713;border:1px solid #f0d49d;padding:10px 14px;border-radius:12px;font-size:13px;font-weight:800;box-shadow:var(--shadow)}
 .setup{border:1px solid #d7e3ef;background:#f3f8fc;border-radius:13px;padding:13px;margin-bottom:16px;font-size:13px;line-height:1.55}
 @media(max-width:800px){.stats,.status-grid{grid-template-columns:1fr}.container{padding:15px}.top{padding:13px 15px}.login-card{padding:24px}}
+
+/* Login profissional */
+.login{
+  background:
+    radial-gradient(circle at 20% 20%, rgba(23,63,104,.10), transparent 28%),
+    radial-gradient(circle at 80% 80%, rgba(23,63,104,.08), transparent 32%),
+    linear-gradient(135deg,#eef3f8 0%,#f8fafc 100%);
+}
+.login-card{
+  width:min(430px,100%);
+  padding:34px 34px 30px;
+  border-radius:22px;
+  border:1px solid rgba(210,218,228,.9);
+  box-shadow:0 24px 60px rgba(20,45,70,.12);
+}
+.login-brand{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  margin-bottom:28px;
+}
+.login-brand .logo{
+  width:58px;
+  height:58px;
+  border-radius:17px;
+  font-size:21px;
+  margin-bottom:14px;
+  box-shadow:0 8px 18px rgba(23,63,104,.18);
+}
+.login-brand h1{
+  margin:0;
+  font-size:24px;
+  letter-spacing:.4px;
+  font-weight:950;
+  color:#11263b;
+}
+#loginView .field label{
+  font-size:12px;
+  letter-spacing:.04em;
+  color:#22364a;
+}
+#loginView input{
+  min-height:48px;
+  border-radius:11px;
+  border:1px solid #cfd9e5;
+  padding:0 14px;
+  background:#fbfdff;
+}
+#loginView input:focus{
+  background:#fff;
+  border-color:#173f68;
+  box-shadow:0 0 0 3px rgba(23,63,104,.08);
+}
+#loginView .btn.primary{
+  min-height:46px;
+  margin-top:4px;
+  border-radius:11px;
+  background:linear-gradient(180deg,#214f7d,#173f68);
+  box-shadow:0 8px 18px rgba(23,63,104,.15);
+}
+#loginError{
+  margin-top:12px;
+  text-align:center;
+}
+
 </style>
 </head>
 <body>
@@ -55,12 +122,9 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
 
 <section id="loginView" class="login">
   <div class="login-card">
-    <div class="brand">
+    <div class="login-brand">
       <div class="logo">HE</div>
-      <div>
-        <h1 style="font-size:24px;margin-bottom:3px">Hora Extra & Lanches</h1>
-        <div class="muted">Controle diário por setor</div>
-      </div>
+      <h1>HORA EXTRA-LANCHES</h1>
     </div>
 
     <div id="firebaseSetup" class="setup hidden">
@@ -74,7 +138,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
     </div>
     <button class="btn primary full" id="loginBtn">ENTRAR</button>
     <div id="loginError" class="error hidden">Senha inválida.</div>
-    <div class="notice">Os setores enxergam apenas a própria lista. O RH consulta todos os pedidos. O ADMIN possui acesso total.</div>
+    
   </div>
 </section>
 
@@ -196,12 +260,12 @@ const firebaseConfig = {
 };
 
 const ACCESS = {
-  "1405": {type:"sector", sector:"INGRESSO", email:"ingresso@hrextratrampo.com"},
-  "1406": {type:"sector", sector:"SEPARAÇÃO", email:"separacao@hrextratrampo.com"},
-  "1407": {type:"sector", sector:"EXPEDIÇÃO", email:"expedicao@hrextratrampo.com"},
-  "1408": {type:"sector", sector:"ESPECIAL", email:"especial@hrextratrampo.com"},
-  "1409": {type:"rh", email:"rh@hrextratrampo.com"},
-  "161004": {type:"admin", email:"admin@hrextratrampo.com"}
+  "1405": {type:"sector", sector:"INGRESSO", email:"ingresso@hrextratrampo.com", authPassword:"Ig#7vP2mQ9!"},
+  "1406": {type:"sector", sector:"SEPARAÇÃO", email:"separacao@hrextratrampo.com", authPassword:"Sp#4kR8nT6!"},
+  "1407": {type:"sector", sector:"EXPEDIÇÃO", email:"expedicao@hrextratrampo.com", authPassword:"Ex#9mL3qW5!"},
+  "1408": {type:"sector", sector:"ESPECIAL", email:"especial@hrextratrampo.com", authPassword:"Es#2tN7pV4!"},
+  "1409": {type:"rh", email:"rh@hrextratrampo.com", authPassword:"Rh#6cB8xK3!"},
+  "161004": {type:"admin", email:"admin@hrextratrampo.com", authPassword:"Ad#5zM9rQ2!"}
 };
 const SECTORS = ["INGRESSO","SEPARAÇÃO","EXPEDIÇÃO","ESPECIAL"];
 const SNACKS = ["X FRANGO","X BACON","X CALABRESA","X SALADA","X EGG"];
@@ -256,7 +320,7 @@ $("loginBtn").onclick=async()=>{
   if(!access){$("loginError").textContent="Senha inválida.";$("loginError").classList.remove("hidden");return}
   if(!db || !auth){alert("Firebase não configurado corretamente.");return}
   try{
-    await signInWithEmailAndPassword(auth, access.email, pass);
+    await signInWithEmailAndPassword(auth, access.email, access.authPassword);
     session=access;
     access.type==="sector" ? openSector() : openRH();
   }catch(e){
