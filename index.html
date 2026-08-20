@@ -32,7 +32,7 @@ input:focus,select:focus{border-color:var(--navy)}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin:15px 0}.stat{border:1px solid var(--line);background:#f8fafc;border-radius:14px;padding:14px}.num{font-size:25px;font-weight:950}.lab{font-size:11px;color:var(--muted);font-weight:800;margin-top:3px}
 .badge{display:inline-flex;padding:7px 10px;border-radius:999px;font-size:12px;font-weight:900}.ok{background:#e9f8ef;color:var(--green)}.wait{background:#fff6df;color:var(--amber)}.bad{background:#fdecec;color:var(--red)}
 table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:1px solid var(--line);text-align:left}th{font-size:11px;color:var(--muted);letter-spacing:.04em}td{font-size:14px}.table-wrap{overflow:auto}
-.icon-btn{border:0;border-radius:9px;padding:8px 10px;cursor:pointer;font-weight:850}.icon-btn.red{background:#fff0ef;color:var(--red)}
+.icon-btn{border:0;border-radius:9px;padding:8px 10px;cursor:pointer;font-weight:850}.icon-btn.red{background:#fff0ef;color:var(--red)}.icon-btn.edit{background:#edf5ff;color:var(--navy);margin-right:6px}
 .empty{text-align:center;padding:28px;border:1px dashed var(--line);border-radius:14px;color:var(--muted)}
 .summary{border:1px solid var(--line);background:#fbfcfe;border-radius:14px;padding:15px;margin-bottom:11px}.sum-title{display:flex;justify-content:space-between;gap:10px;font-weight:950;margin-bottom:8px}.names{line-height:1.6}
 .status-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.status{border:1px solid var(--line);border-radius:13px;padding:13px;background:#fafafa}.status strong{display:block;margin-bottom:5px}
@@ -366,8 +366,9 @@ function renderSector(){
   const wrap=$("sectorList");
   if(!currentSectorItems.length){wrap.innerHTML='<div class="empty">Nenhum funcionário adicionado.</div>';return}
   wrap.innerHTML=`<div class="table-wrap"><table><thead><tr><th>NOME</th><th>LANCHE</th><th>AÇÃO</th></tr></thead><tbody>${
-    currentSectorItems.map(x=>`<tr><td><strong>${safe(x.name)}</strong></td><td>${safe(x.snack)}</td><td><button class="icon-btn red" data-del="${x.id}" ${currentSectorFinalized?"disabled":""}>Excluir</button></td></tr>`).join("")
+    currentSectorItems.map(x=>`<tr><td><strong>${safe(x.name)}</strong></td><td>${safe(x.snack)}</td><td><button class="icon-btn edit" data-edit="${x.id}" ${currentSectorFinalized?"disabled":""}>Editar</button><button class="icon-btn red" data-del="${x.id}" ${currentSectorFinalized?"disabled":""}>Excluir</button></td></tr>`).join("")
   }</tbody></table></div>`;
+  wrap.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>editEmployee(b.dataset.edit));
   wrap.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>removeEmployee(b.dataset.del));
 }
 $("addBtn").onclick=addEmployee;
@@ -386,11 +387,63 @@ async function addEmployee(){
     $("employeeName").value="";$("snack").value="";$("employeeName").focus();
   }catch(e){alertFirestore(e)}
 }
+async function editEmployee(id){
+  if(currentSectorFinalized){alert("A lista foi finalizada. Reabra para editar.");return}
+  const item=currentSectorItems.find(x=>x.id===id);
+  if(!item)return;
+
+  const newName=normalizeName(prompt("Nome do funcionário:",item.name) || "");
+  if(!newName)return;
+
+  const options=SNACKS.map((s,i)=>`${i+1} - ${s}`).join("\n");
+  const currentIndex=SNACKS.indexOf(item.snack)+1;
+  const choice=prompt(`Escolha o lanche:\n${options}`,String(currentIndex));
+  if(choice===null)return;
+
+  const idx=Number(choice)-1;
+  if(idx<0 || idx>=SNACKS.length || !Number.isInteger(idx)){
+    alert("Opção de lanche inválida.");
+    return;
+  }
+  const newSnack=SNACKS[idx];
+
+  const duplicate=currentSectorItems.some(x=>x.id!==id && x.name.toLowerCase()===newName.toLowerCase());
+  if(duplicate){alert("Já existe outro funcionário com esse nome na lista de hoje.");return}
+
+  try{
+    await setDoc(doc(db,"pedidos",id),{
+      date:item.date,
+      sector:item.sector,
+      name:newName,
+      snack:newSnack,
+      updatedAt:serverTimestamp()
+    });
+  }catch(e){alertFirestore(e)}
+}
+
 async function removeEmployee(id){if(!confirm("Excluir este funcionário da lista?"))return;try{await deleteDoc(doc(db,"pedidos",id))}catch(e){alertFirestore(e)}}
 $("finishBtn").onclick=async()=>{
-  if(!currentSectorItems.length){alert("Adicione pelo menos um funcionário.");return}
   const date=isoToday(),sector=session.sector;
-  try{await setDoc(doc(db,"fechamentos",`${date}__${sector}`),{date,sector,finalized:true,updatedAt:serverTimestamp()});currentSectorFinalized=true;renderSector();alert("Lista finalizada para o RH.")}catch(e){alertFirestore(e)}
+
+  if(!currentSectorItems.length){
+    const ok=confirm(`Confirmar que NÃO ficará ninguém de hora extra no setor ${sector} hoje?`);
+    if(!ok)return;
+  }
+
+  try{
+    await setDoc(doc(db,"fechamentos",`${date}__${sector}`),{
+      date,
+      sector,
+      finalized:true,
+      empty:currentSectorItems.length===0,
+      updatedAt:serverTimestamp()
+    });
+    currentSectorFinalized=true;
+    renderSector();
+    alert(currentSectorItems.length===0
+      ? "Confirmado: ninguém ficará de hora extra neste setor hoje."
+      : "Lista finalizada para o RH.");
+  }catch(e){alertFirestore(e)}
 };
 $("reopenBtn").onclick=async()=>{
   const date=isoToday(),sector=session.sector;
@@ -422,7 +475,7 @@ function renderRH(){
   const date=$("rhDate").value||isoToday();
   $("statusGrid").innerHTML=SECTORS.map(s=>{
     const n=rhItems.filter(x=>x.sector===s).length,done=!!rhFinalized[s];
-    return `<div class="status"><strong>${s}</strong><div class="muted">${n} lanche${n===1?"":"s"}</div><span class="badge ${done?"ok":"wait"}" style="margin-top:8px">${done?"Finalizado":"Aguardando"}</span></div>`
+    return `<div class="status"><strong>${s}</strong><div class="muted">${done && n===0 ? "Ninguém fará hora extra" : `${n} lanche${n===1?"":"s"}`}</div><span class="badge ${done?"ok":"wait"}" style="margin-top:8px">${done?(n===0?"Confirmado sem funcionários":"Finalizado"):"Aguardando"}</span></div>`
   }).join("");
 
   const grouped={};SNACKS.forEach(s=>grouped[s]=[]);
@@ -438,12 +491,12 @@ function renderRH(){
   $("sectorDetails").innerHTML=SECTORS.map(s=>{
     const list=rhItems.filter(x=>x.sector===s).sort((a,b)=>a.name.localeCompare(b.name,"pt-BR"));
     const adminButtons=session.type==="admin"?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 12px"><button class="btn outline" data-admin-reopen="${s}">REABRIR SETOR</button><button class="btn success" data-admin-finish="${s}">FINALIZAR SETOR</button></div>`:"";
-    const rows=list.map(x=>`<tr><td>${safe(x.name)}</td><td>${session.type==="admin"?`<select data-admin-snack="${x.id}" style="min-width:150px">${SNACKS.map(sn=>`<option ${sn===x.snack?"selected":""}>${sn}</option>`).join("")}</select>`:safe(x.snack)}</td>${session.type==="admin"?`<td><button class="icon-btn red" data-admin-del="${x.id}">Excluir</button></td>`:""}</tr>`).join("");
+    const rows=list.map(x=>`<tr><td>${session.type==="admin"?`<input data-admin-name="${x.id}" value="${safe(x.name)}" style="min-width:180px;padding:8px 10px">`:safe(x.name)}</td><td>${session.type==="admin"?`<select data-admin-snack="${x.id}" style="min-width:150px;padding:8px 10px">${SNACKS.map(sn=>`<option ${sn===x.snack?"selected":""}>${sn}</option>`).join("")}</select>`:safe(x.snack)}</td>${session.type==="admin"?`<td><button class="icon-btn edit" data-admin-save="${x.id}">Salvar</button><button class="icon-btn red" data-admin-del="${x.id}">Excluir</button></td>`:""}</tr>`).join("");
     return `<div class="summary"><div class="sum-title"><span>${s}</span><span>${list.length}</span></div>${adminButtons}${list.length?`<div class="table-wrap"><table><thead><tr><th>NOME</th><th>LANCHE</th>${session.type==="admin"?"<th>AÇÃO</th>":""}</tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="muted">Sem lançamentos.</div>'}</div>`
   }).join("");
   if(session.type==="admin"){
     $("sectorDetails").querySelectorAll("[data-admin-del]").forEach(b=>b.onclick=()=>adminDeletePedido(b.dataset.adminDel));
-    $("sectorDetails").querySelectorAll("[data-admin-snack]").forEach(s=>s.onchange=()=>adminChangeSnack(s.dataset.adminSnack,s.value));
+    $("sectorDetails").querySelectorAll("[data-admin-save]").forEach(b=>b.onclick=()=>adminSavePedido(b.dataset.adminSave));
     $("sectorDetails").querySelectorAll("[data-admin-reopen]").forEach(b=>b.onclick=()=>adminSetFinalized(date,b.dataset.adminReopen,false));
     $("sectorDetails").querySelectorAll("[data-admin-finish]").forEach(b=>b.onclick=()=>adminSetFinalized(date,b.dataset.adminFinish,true));
   }
@@ -464,6 +517,24 @@ async function adminDeletePedido(id){
   if(!confirm("Excluir este lançamento?")) return;
   try{await deleteDoc(doc(db,"pedidos",id));}catch(e){alertFirestore(e)}
 }
+async function adminSavePedido(id){
+  if(session?.type!=="admin")return;
+  const item=rhItems.find(x=>x.id===id);
+  if(!item)return;
+  const nameEl=document.querySelector(`[data-admin-name="${id}"]`);
+  const snackEl=document.querySelector(`[data-admin-snack="${id}"]`);
+  const newName=normalizeName(nameEl?.value||"");
+  const newSnack=snackEl?.value||"";
+  if(!newName){alert("Digite o nome do funcionário.");return}
+  if(!SNACKS.includes(newSnack)){alert("Lanche inválido.");return}
+  try{
+    await setDoc(doc(db,"pedidos",id),{
+      date:item.date,sector:item.sector,name:newName,snack:newSnack,updatedAt:serverTimestamp()
+    });
+    alert("Alteração salva.");
+  }catch(e){alertFirestore(e)}
+}
+
 async function adminChangeSnack(id,newSnack){
   if(session?.type!=="admin") return;
   const item=rhItems.find(x=>x.id===id); if(!item) return;
