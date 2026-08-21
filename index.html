@@ -308,9 +308,12 @@ function clearListeners(){
   unsubscribeRH.forEach(fn=>fn&&fn()); unsubscribeRH=[];
 }
 async function logout(){
-  clearListeners(); session=null;
+  clearListeners();
+  currentSectorItems=[]; currentSectorFinalized=false; rhItems=[]; rhFinalized={};
+  $("employeeName").value=""; $("snack").value="";
+  $("sectorList").innerHTML='<div class="empty">Carregando...</div>';
+  session=null; $("password").value=""; show("loginView");
   try{ if(auth) await signOut(auth); }catch(e){ console.error(e); }
-  $("password").value=""; show("loginView");
 }
 
 $("loginBtn").onclick=async()=>{
@@ -333,6 +336,10 @@ $("password").addEventListener("keydown",e=>{if(e.key==="Enter")$("loginBtn").cl
 $("logoutSector").onclick=logout;$("logoutRh").onclick=logout;
 
 function openSector(){
+  currentSectorItems=[]; currentSectorFinalized=false;
+  $("employeeName").value=""; $("snack").value="";
+  $("sectorList").innerHTML='<div class="empty">Carregando...</div>';
+  $("sectorTotal").textContent="0";
   show("sectorView");
   const date=isoToday();
   $("topSector").textContent=session.sector;
@@ -346,9 +353,11 @@ function listenSector(){
   if(unsubscribeSector)unsubscribeSector();
   const date=isoToday(), sector=session.sector;
   const q=query(collection(db,"pedidos"),where("date","==",date),where("sector","==",sector));
+  listenFinalized(date,sector);
   unsubscribeSector=onSnapshot(q,snap=>{
+    if(!session || session.type!=="sector" || session.sector!==sector)return;
     currentSectorItems=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>a.name.localeCompare(b.name,"pt-BR"));
-    listenFinalized(date,sector);
+    renderSector();
     $("offlineBadge").classList.add("hidden");
   },err=>{console.error(err);$("offlineBadge").classList.remove("hidden");alertFirestore(err)});
 }
@@ -382,10 +391,12 @@ async function addEmployee(){
   if(currentSectorItems.some(x=>x.name.toLowerCase()===name.toLowerCase())){alert("Este funcionário já está na lista de hoje.");return}
   const date=isoToday(), sector=session.sector;
   const id=`${date}__${sector}__${slugName(name)}`;
-  try{
-    await setDoc(doc(db,"pedidos",id),{date,sector,name,snack,updatedAt:serverTimestamp()});
-    $("employeeName").value="";$("snack").value="";$("employeeName").focus();
-  }catch(e){alertFirestore(e)}
+  const temp={id,date,sector,name,snack};
+  currentSectorItems=[...currentSectorItems,temp].sort((a,b)=>a.name.localeCompare(b.name,"pt-BR"));
+  $("employeeName").value=""; $("snack").value=""; $("employeeName").focus();
+  renderSector();
+  try{ await setDoc(doc(db,"pedidos",id),{date,sector,name,snack,updatedAt:serverTimestamp()}); }
+  catch(e){ currentSectorItems=currentSectorItems.filter(x=>x.id!==id); renderSector(); alertFirestore(e); }
 }
 async function editEmployee(id){
   if(currentSectorFinalized){alert("A lista foi finalizada. Reabra para editar.");return}
@@ -410,18 +421,27 @@ async function editEmployee(id){
   const duplicate=currentSectorItems.some(x=>x.id!==id && x.name.toLowerCase()===newName.toLowerCase());
   if(duplicate){alert("Já existe outro funcionário com esse nome na lista de hoje.");return}
 
+  const backup={...item};
+  currentSectorItems=currentSectorItems.map(x=>x.id===id?{...x,name:newName,snack:newSnack}:x)
+    .sort((a,b)=>a.name.localeCompare(b.name,"pt-BR"));
+  renderSector();
   try{
     await setDoc(doc(db,"pedidos",id),{
-      date:item.date,
-      sector:item.sector,
-      name:newName,
-      snack:newSnack,
-      updatedAt:serverTimestamp()
+      date:item.date,sector:item.sector,name:newName,snack:newSnack,updatedAt:serverTimestamp()
     });
-  }catch(e){alertFirestore(e)}
+  }catch(e){
+    currentSectorItems=currentSectorItems.map(x=>x.id===id?backup:x).sort((a,b)=>a.name.localeCompare(b.name,"pt-BR"));
+    renderSector(); alertFirestore(e);
+  }
 }
 
-async function removeEmployee(id){if(!confirm("Excluir este funcionário da lista?"))return;try{await deleteDoc(doc(db,"pedidos",id))}catch(e){alertFirestore(e)}}
+async function removeEmployee(id){
+  if(!confirm("Excluir este funcionário da lista?"))return;
+  const backup=[...currentSectorItems];
+  currentSectorItems=currentSectorItems.filter(x=>x.id!==id); renderSector();
+  try{await deleteDoc(doc(db,"pedidos",id))}
+  catch(e){currentSectorItems=backup;renderSector();alertFirestore(e)}
+}
 $("finishBtn").onclick=async()=>{
   const date=isoToday(),sector=session.sector;
 
