@@ -203,63 +203,16 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
 }
 
 
-/* Manutenção */
-.maintenance-control{
-  border:1px solid #f0c36d;
-  background:#fffaf0;
-}
-.maintenance-control.active{
-  border-color:#d85b52;
-  background:#fff3f2;
-}
-.maintenance-control .maintenance-row{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:18px;
-  flex-wrap:wrap;
-}
-.maintenance-state{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  font-weight:950;
-}
-.maintenance-dot{
-  width:11px;height:11px;border-radius:50%;
-  background:#168653;
-  box-shadow:0 0 0 4px rgba(22,134,83,.12);
-}
-.maintenance-control.active .maintenance-dot{
-  background:#c33d35;
-  box-shadow:0 0 0 4px rgba(195,61,53,.12);
-}
-.maintenance-screen{
-  min-height:100vh;
-  display:grid;
-  place-items:center;
-  padding:24px;
-  background:linear-gradient(135deg,#eef3f8,#fafcfe);
-}
-.maintenance-box{
-  width:min(520px,100%);
-  background:#fff;
-  border:1px solid #e4e8ee;
-  border-radius:24px;
-  padding:38px 32px;
-  text-align:center;
-  box-shadow:0 24px 60px rgba(20,45,70,.12);
-}
-.maintenance-symbol{
-  width:68px;height:68px;margin:0 auto 18px;
-  border-radius:20px;
-  display:grid;place-items:center;
-  background:#fff4df;color:#b7791f;
-  font-size:34px;font-weight:950;
-}
-.maintenance-box h1{margin-bottom:10px;color:#11263b}
-.maintenance-box p{margin:0;color:#6b7280;line-height:1.65}
-
+/* Controle de manutenção - somente ADMIN MASTER */
+.maintenance-control{border:1px solid #f0c36d;background:#fffaf0}
+.maintenance-control.active{border-color:#d85b52;background:#fff3f2}
+.maintenance-row{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
+.maintenance-state{display:flex;align-items:center;gap:10px;font-weight:950}
+.maintenance-dot{width:11px;height:11px;border-radius:50%;background:#168653;box-shadow:0 0 0 4px rgba(22,134,83,.12)}
+.maintenance-control.active .maintenance-dot{background:#c33d35;box-shadow:0 0 0 4px rgba(195,61,53,.12)}
+.maintenance-screen{min-height:100vh;display:grid;place-items:center;padding:24px}
+.maintenance-box{width:min(520px,100%);background:#fff;border:1px solid #e4e8ee;border-radius:24px;padding:38px 32px;text-align:center;box-shadow:var(--shadow)}
+.maintenance-symbol{width:68px;height:68px;margin:0 auto 18px;border-radius:20px;display:grid;place-items:center;background:#fff4df;color:#b7791f;font-size:34px;font-weight:950}
 </style>
 </head>
 <body>
@@ -298,7 +251,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
   <div class="maintenance-box">
     <div class="maintenance-symbol">!</div>
     <h1>SISTEMA EM MANUTENÇÃO</h1>
-    <p>Estamos realizando ajustes no sistema.<br>Por favor, tente novamente em alguns minutos.</p>
+    <p class="muted">Estamos realizando ajustes no sistema.<br>Tente novamente em alguns minutos.</p>
     <button class="btn light" id="maintenanceLogout" style="margin-top:22px">VOLTAR AO LOGIN</button>
   </div>
 </section>
@@ -316,21 +269,6 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
         <div class="sector-deadline-text">CONFIRMAR NOMES ATÉ 15:45, POR FAVOR</div>
       </div>
     </div>
-    <div id="maintenanceControl" class="card maintenance-control hidden">
-      <div class="maintenance-row">
-        <div>
-          <div class="maintenance-state">
-            <span class="maintenance-dot"></span>
-            <span id="maintenanceStateText">SISTEMA LIBERADO</span>
-          </div>
-          <div id="maintenanceHelp" class="muted" style="margin-top:7px">
-            Ative a manutenção para bloquear temporariamente os demais acessos.
-          </div>
-        </div>
-        <button id="maintenanceBtn" class="btn danger">ATIVAR MANUTENÇÃO</button>
-      </div>
-    </div>
-
     <div class="card">
       <div class="head">
         <div><h2 id="sectorTitle"></h2><div class="muted">Informe quem ficará de hora extra e o lanche escolhido.</div></div>
@@ -378,6 +316,16 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
     <button class="btn light" id="logoutRh">Sair</button>
   </header>
   <main class="container">
+    <div id="maintenanceControl" class="card maintenance-control hidden">
+      <div class="maintenance-row">
+        <div>
+          <div class="maintenance-state"><span class="maintenance-dot"></span><span id="maintenanceStateText">SISTEMA LIBERADO</span></div>
+          <div id="maintenanceHelp" class="muted" style="margin-top:7px">Ative para bloquear temporariamente RH e todos os setores.</div>
+        </div>
+        <button id="maintenanceBtn" class="btn danger">ATIVAR MANUTENÇÃO</button>
+      </div>
+    </div>
+
     <div class="card">
       <div class="head">
         <div><h2>Consulta</h2><div class="muted">Selecione a data desejada.</div></div>
@@ -491,7 +439,6 @@ function show(view){
 function clearListeners(){
   if(unsubscribeSector){unsubscribeSector();unsubscribeSector=null}
   unsubscribeRH.forEach(fn=>fn&&fn()); unsubscribeRH=[];
-  if(unsubscribeMaintenance){unsubscribeMaintenance();unsubscribeMaintenance=null}
 }
 async function logout(){
   clearListeners();
@@ -512,11 +459,10 @@ $("loginBtn").onclick=async()=>{
     await signInWithEmailAndPassword(auth, access.email, access.authPassword);
     session=access;
 
-    const maintenanceSnap = await getDoc(doc(db,"configuracoes","manutencao"));
-    maintenanceActive = maintenanceSnap.exists() && maintenanceSnap.data().active === true;
+    const ms=await getDoc(doc(db,"configuracoes","manutencao"));
+    maintenanceActive=ms.exists() && ms.data().active===true;
 
-    const isMaintenanceADM = access.type==="sector" && access.sector==="ADM";
-    if(maintenanceActive && !isMaintenanceADM){
+    if(maintenanceActive && access.type!=="admin"){
       show("maintenanceView");
       startMaintenanceWatcher();
       return;
@@ -543,12 +489,6 @@ function openSector(){
   $("topSector").textContent=session.sector;
   $("topDate").textContent=`${dayName(date)} • ${fmt(date)}`;
   $("sectorTitle").textContent=session.sector;
-
-  const isMaintenanceADM = session.sector==="ADM";
-  $("maintenanceControl").classList.toggle("hidden",!isMaintenanceADM);
-  document.querySelector(".sector-deadline-alert").classList.toggle("hidden",isMaintenanceADM);
-  if(isMaintenanceADM) renderMaintenanceControl();
-
   $("sectorDate").textContent=fmt(date);
   $("sectorDay").textContent=dayName(date);
   listenSector();
@@ -675,18 +615,13 @@ $("reopenBtn").onclick=async()=>{
 };
 
 
-function isMaintenanceADM(){
-  return session?.type==="sector" && session?.sector==="ADM";
-}
-
 function renderMaintenanceControl(){
-  if(!isMaintenanceADM()) return;
-  const box=$("maintenanceControl");
-  box.classList.toggle("active",maintenanceActive);
+  if(session?.type!=="admin") return;
+  $("maintenanceControl").classList.toggle("active",maintenanceActive);
   $("maintenanceStateText").textContent=maintenanceActive?"MANUTENÇÃO ATIVA":"SISTEMA LIBERADO";
   $("maintenanceHelp").textContent=maintenanceActive
-    ?"Os demais acessos estão bloqueados. O setor ADM continua liberado."
-    :"Ative a manutenção para bloquear temporariamente os demais acessos.";
+    ?"RH e todos os setores estão bloqueados. O ADMIN MASTER continua liberado."
+    :"Ative para bloquear temporariamente RH e todos os setores.";
   $("maintenanceBtn").textContent=maintenanceActive?"FINALIZAR MANUTENÇÃO":"ATIVAR MANUTENÇÃO";
   $("maintenanceBtn").className=`btn ${maintenanceActive?"success":"danger"}`;
 }
@@ -695,48 +630,35 @@ function startMaintenanceWatcher(){
   if(unsubscribeMaintenance) unsubscribeMaintenance();
   unsubscribeMaintenance=onSnapshot(doc(db,"configuracoes","manutencao"),snap=>{
     maintenanceActive=snap.exists() && snap.data().active===true;
-
-    if(isMaintenanceADM()){
-      renderMaintenanceControl();
-      return;
-    }
-
+    if(session?.type==="admin"){ renderMaintenanceControl(); return; }
     if(maintenanceActive && session){
-      if(unsubscribeSector){unsubscribeSector();unsubscribeSector=null}
-      unsubscribeRH.forEach(fn=>fn&&fn()); unsubscribeRH=[];
       show("maintenanceView");
-    }else if(!maintenanceActive && session && !$("maintenanceView").classList.contains("hidden")){
+    } else if(!maintenanceActive && session && !$("maintenanceView").classList.contains("hidden")){
       session.type==="sector" ? openSector() : openRH();
     }
-  },err=>console.error("Falha ao acompanhar manutenção:",err));
+  },err=>console.error("Manutenção:",err));
 }
 
 $("maintenanceBtn").onclick=async()=>{
-  if(!isMaintenanceADM()) return;
-
+  if(session?.type!=="admin") return;
   const next=!maintenanceActive;
-  const ok=confirm(next
-    ?"Ativar a manutenção agora? Os demais setores e o RH ficarão temporariamente bloqueados."
-    :"Finalizar a manutenção e liberar o sistema para todos?");
-  if(!ok) return;
-
+  if(!confirm(next
+    ?"Ativar manutenção? RH e TODOS os setores ficarão bloqueados."
+    :"Finalizar manutenção e liberar o sistema para todos?")) return;
   try{
     await setDoc(doc(db,"configuracoes","manutencao"),{
-      active:next,
-      updatedAt:serverTimestamp(),
-      updatedBy:"ADM"
+      active:next,updatedAt:serverTimestamp(),updatedBy:"ADMIN MASTER"
     },{merge:true});
-  }catch(e){
-    alertFirestore(e);
-  }
+  }catch(e){alertFirestore(e)}
 };
-
 $("maintenanceLogout").onclick=logout;
 
 function openRH(){
   show("rhView");
   document.querySelector("#rhView .top-title").textContent=session.type==="admin"?"Painel ADMIN":"Painel RH";
   document.querySelector("#rhView .top-sub").textContent=session.type==="admin"?"Acesso total aos setores, pedidos e fechamentos":"Resumo geral dos lanches";
+  $("maintenanceControl").classList.toggle("hidden",session.type!=="admin");
+  if(session.type==="admin") renderMaintenanceControl();
   $("rhDate").value=isoToday();listenRH();
 }
 $("rhDate").onchange=listenRH;
