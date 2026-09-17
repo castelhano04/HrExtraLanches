@@ -529,39 +529,55 @@ function calculateFinance(items){
   const byDate = {};
 
   (items||[]).forEach(item=>{
-    const snack = String(item.snack||"").toUpperCase().trim();
-    const date = item.date;
+    const snack=String(item.snack||"").toUpperCase().trim();
+    const date=item.date;
     if(!bySnack[snack] || !date) return;
-    const effectivePrice = Number.isFinite(Number(item.unitPrice)) ? Number(item.unitPrice) : bySnack[snack].unit;
+
+    // Registros antigos que ainda não têm unitPrice usam o preço atual.
+    // Novos registros usam o preço salvo no próprio pedido.
+    const effectivePrice =
+      item.unitPrice !== undefined && item.unitPrice !== null &&
+      Number.isFinite(Number(item.unitPrice))
+        ? Number(item.unitPrice)
+        : bySnack[snack].unit;
+
     bySnack[snack].qty++;
     bySnack[snack].total += effectivePrice;
+
     if(!byDate[date]) byDate[date]={snacks:0,count:0};
     byDate[date].snacks += effectivePrice;
     byDate[date].count++;
   });
 
-  const activeDates = Object.keys(byDate);
+  const activeDates=Object.keys(byDate);
   activeDates.forEach(date=>{
-    byDate[date].delivery = DELIVERY_FEE;
-    byDate[date].total = byDate[date].snacks + DELIVERY_FEE;
+    byDate[date].delivery=DELIVERY_FEE;
+    byDate[date].total=byDate[date].snacks+DELIVERY_FEE;
   });
 
-  const snacksTotal = rows.reduce((s,r)=>s+r.total,0);
-  const deliveryTotal = activeDates.length * DELIVERY_FEE;
-  return {rows,byDate,snacksTotal,deliveryTotal,grandTotal:snacksTotal+deliveryTotal};
+  const snacksTotal=rows.reduce((s,r)=>s+r.total,0);
+  const deliveryTotal=activeDates.length*DELIVERY_FEE;
+
+  return {
+    rows,byDate,
+    snacksTotal,
+    deliveryTotal,
+    grandTotal:snacksTotal+deliveryTotal
+  };
 }
 
 function brDate(iso){
-  if(!iso) return "";
+  if(!iso)return "";
   const [y,m,d]=iso.split("-");
   return `${d}/${m}/${y}`;
 }
 
 function renderFinance(items){
   if(!session || (session.type!=="rh" && session.type!=="admin")) return;
-  const f=calculateFinance(items||[]);
 
+  const f=calculateFinance(items||[]);
   const body=document.getElementById("financeBody");
+
   if(body){
     body.innerHTML=f.rows.map(r=>`
       <tr>
@@ -569,7 +585,7 @@ function renderFinance(items){
         <td class="num">${r.qty}</td>
         <td class="num">${money(r.unit)}</td>
         <td class="num"><strong>${money(r.total)}</strong></td>
-      </tr>`).join("") + `
+      </tr>`).join("")+`
       <tr class="finance-total-row">
         <td>TOTAL DE LANCHES</td>
         <td class="num">${f.rows.reduce((s,r)=>s+r.qty,0)}</td>
@@ -580,14 +596,15 @@ function renderFinance(items){
 
   const daily=document.getElementById("dailyCosts");
   if(daily){
-    const dates=Object.keys(f.byDate).sort();
-    daily.innerHTML=dates.length ? dates.map(date=>`
-      <div class="daily-cost-chip">
-        ${brDate(date)}
-        <strong>${money(f.byDate[date].total)}</strong>
-        <small>${f.byDate[date].count} lanche(s) + ${money(DELIVERY_FEE)} entrega</small>
-      </div>`).join("") :
-      `<div class="daily-cost-chip">Nenhum pedido no período.</div>`;
+    const dates=Object.keys(f.byDate).sort().reverse();
+    daily.innerHTML=dates.length
+      ? dates.map(date=>`
+        <div class="daily-cost-chip">
+          ${brDate(date)}
+          <strong>${money(f.byDate[date].total)}</strong>
+          <small>${f.byDate[date].count} lanche(s) + ${money(DELIVERY_FEE)} entrega</small>
+        </div>`).join("")
+      : `<div class="daily-cost-chip">Nenhum pedido encontrado no histórico.</div>`;
   }
 
   const a=document.getElementById("snacksCost");
@@ -596,6 +613,27 @@ function renderFinance(items){
   if(a)a.textContent=money(f.snacksTotal);
   if(b)b.textContent=money(f.deliveryTotal);
   if(c)c.textContent=money(f.grandTotal);
+}
+
+let unsubscribeFinance=null;
+
+function listenFinanceHistory(){
+  if(unsubscribeFinance){unsubscribeFinance();unsubscribeFinance=null;}
+  if(!session || (session.type!=="rh" && session.type!=="admin")) return;
+
+  // Sem filtro por data: lê todos os pedidos já existentes.
+  // Assim a aba Valores nasce preenchida com todo o histórico do Firestore
+  // e continua atualizando em tempo real.
+  unsubscribeFinance=onSnapshot(
+    collection(db,"pedidos"),
+    snap=>{
+      const allHistoricalItems=snap.docs.map(d=>({id:d.id,...d.data()}));
+      renderFinance(allHistoricalItems);
+    },
+    err=>{
+      console.error("Erro ao carregar histórico financeiro:",err);
+    }
+  );
 }
 
 const ACCESS = {
@@ -645,6 +683,7 @@ function show(view){
   $(view).classList.remove("hidden");
 }
 function clearListeners(){
+  if(unsubscribeFinance){unsubscribeFinance();unsubscribeFinance=null;}
   if(unsubscribeSector){unsubscribeSector();unsubscribeSector=null}
   unsubscribeRH.forEach(fn=>fn&&fn()); unsubscribeRH=[];
 }
@@ -868,7 +907,7 @@ function openRH(){
   document.querySelector("#rhView .top-sub").textContent=session.type==="admin"?"Acesso total aos setores, pedidos e fechamentos":"Resumo geral dos lanches";
   $("maintenanceControl").classList.toggle("hidden",session.type!=="admin");
   if(session.type==="admin") renderMaintenanceControl();
-  $("rhDate").value=isoToday();listenRH();
+  $("rhDate").value=isoToday();listenRH();listenFinanceHistory();
 }
 $("rhDate").onchange=listenRH;
 function listenRH(){
@@ -877,7 +916,6 @@ function listenRH(){
   const q1=query(collection(db,"pedidos"),where("date","==",date));
   unsubscribeRH.push(onSnapshot(q1,snap=>{
     rhItems=snap.docs.map(d=>({id:d.id,...d.data()}));
-      renderFinance(rhItems);
     renderRH();
   },err=>alertFirestore(err)));
   const q2=query(collection(db,"fechamentos"),where("date","==",date));
