@@ -233,6 +233,62 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
     .daily-cost-chip strong{display:block;margin-top:2px}
     @media(max-width:720px){.finance-summary{grid-template-columns:1fr}.finance-table{font-size:12px}.finance-table th,.finance-table td{padding:8px 5px}}
 
+
+/* ===== ABA VALORES - VISUAL PROFISSIONAL ===== */
+#tabValues .finance-card{
+  margin-top:0;border:1px solid #d9e3ed;border-radius:20px;padding:22px;
+  background:linear-gradient(180deg,#ffffff 0%,#f9fbfd 100%);
+  box-shadow:0 12px 32px rgba(15,42,68,.08);position:relative;overflow:hidden
+}
+#tabValues .finance-card:before{
+  content:"";position:absolute;left:0;right:0;top:0;height:5px;
+  background:linear-gradient(90deg,#173f68,#3478ad,#173f68)
+}
+#tabValues .finance-head{padding-top:4px;margin-bottom:18px}
+#tabValues .finance-head h3{font-size:22px;color:#173f68;letter-spacing:-.35px}
+#tabValues .finance-head p{font-size:13px;color:#6b7b8c}
+#tabValues .daily-costs{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:10px;margin:0 0 20px
+}
+#tabValues .daily-cost-chip{
+  background:#fff;border:1px solid #dce5ee;border-radius:14px;padding:13px 14px;
+  color:#526476;box-shadow:0 4px 12px rgba(15,42,68,.04)
+}
+#tabValues .daily-cost-chip strong{font-size:19px;color:#173f68;margin:4px 0}
+#tabValues .daily-cost-chip small{display:block;color:#7b8997;line-height:1.35}
+#tabValues .finance-table{
+  border-collapse:separate;border-spacing:0;border:1px solid #dce5ee;
+  border-radius:14px;overflow:hidden;background:#fff
+}
+#tabValues .finance-table th{
+  background:#173f68;color:#fff;border:0;padding:13px 12px;
+  font-size:11px;text-transform:uppercase;letter-spacing:.5px
+}
+#tabValues .finance-table td{padding:13px 12px;border-bottom:1px solid #e7edf3}
+#tabValues .finance-table tbody tr:nth-child(even) td{background:#f8fafc}
+#tabValues .finance-table tbody tr:last-child td{border-bottom:0}
+#tabValues .finance-table tbody tr:hover td{background:#f0f5f9}
+#tabValues .finance-total-row td{
+  background:#e9f1f7!important;color:#173f68;font-weight:900
+}
+#tabValues .finance-summary{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:18px}
+#tabValues .finance-kpi{
+  background:#fff;border:1px solid #dce5ee;border-radius:15px;padding:15px 16px;
+  box-shadow:0 5px 14px rgba(15,42,68,.04);position:relative;overflow:hidden
+}
+#tabValues .finance-kpi:before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:#3478ad
+}
+#tabValues .finance-kpi span{
+  font-size:10px;text-transform:uppercase;letter-spacing:.45px;font-weight:800;color:#718096
+}
+#tabValues .finance-kpi strong{font-size:22px;color:#173f68}
+@media(max-width:720px){
+  #tabValues .finance-summary{grid-template-columns:1fr}
+  #tabValues .daily-costs{grid-template-columns:1fr}
+}
+
 </style>
 </head>
 <body>
@@ -358,6 +414,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
       <button class="tab active" data-tab="summary">Resumo por lanche</button>
       <button class="tab" data-tab="sectors">Por setor</button>
       <button class="tab" data-tab="history">Histórico</button>
+      <button class="tab" data-tab="values">Valores</button>
     </div>
 
     <div id="tabSummary" class="card">
@@ -375,13 +432,12 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
 
     <div id="tabSectors" class="card hidden"><div class="head"><div><h2>Pedidos por setor</h2><div class="muted">Relação completa de nomes e lanches.</div></div></div><div id="sectorDetails"></div></div>
     <div id="tabHistory" class="card hidden"><div class="head"><div><h2>Histórico</h2><div class="muted">Dias já registrados no sistema.</div></div></div><div id="historyList"></div></div>
-  </main>
-
+    <div id="tabValues" class="hidden">
       <div id="financeCard" class="finance-card">
         <div class="finance-head">
           <div>
-            <h3>Resumo financeiro</h3>
-            <p>Visível somente para RH e ADMIN MASTER. Atualização automática conforme os pedidos.</p>
+            <h3>Controle de valores</h3>
+            <p>Visão financeira automática dos pedidos registrados no sistema.</p>
           </div>
         </div>
 
@@ -407,6 +463,10 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
           <div class="finance-kpi"><span>Total geral</span><strong id="grandCost">R$ 0,00</strong></div>
         </div>
       </div>
+    </div>
+  </main>
+
+      
 
 </section>
 
@@ -916,6 +976,7 @@ function activateTab(tab){
   $("tabSummary").classList.toggle("hidden",tab!=="summary");
   $("tabSectors").classList.toggle("hidden",tab!=="sectors");
   $("tabHistory").classList.toggle("hidden",tab!=="history");
+  $("tabValues").classList.toggle("hidden",tab!=="values");
 }
 function alertFirestore(e){
   console.error(e);
