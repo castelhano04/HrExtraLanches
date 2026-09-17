@@ -202,6 +202,64 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
   .sector-deadline-text{font-size:14px}
 }
 
+
+/* Manutenção */
+.maintenance-control{
+  border:1px solid #f0c36d;
+  background:#fffaf0;
+}
+.maintenance-control.active{
+  border-color:#d85b52;
+  background:#fff3f2;
+}
+.maintenance-control .maintenance-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  flex-wrap:wrap;
+}
+.maintenance-state{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  font-weight:950;
+}
+.maintenance-dot{
+  width:11px;height:11px;border-radius:50%;
+  background:#168653;
+  box-shadow:0 0 0 4px rgba(22,134,83,.12);
+}
+.maintenance-control.active .maintenance-dot{
+  background:#c33d35;
+  box-shadow:0 0 0 4px rgba(195,61,53,.12);
+}
+.maintenance-screen{
+  min-height:100vh;
+  display:grid;
+  place-items:center;
+  padding:24px;
+  background:linear-gradient(135deg,#eef3f8,#fafcfe);
+}
+.maintenance-box{
+  width:min(520px,100%);
+  background:#fff;
+  border:1px solid #e4e8ee;
+  border-radius:24px;
+  padding:38px 32px;
+  text-align:center;
+  box-shadow:0 24px 60px rgba(20,45,70,.12);
+}
+.maintenance-symbol{
+  width:68px;height:68px;margin:0 auto 18px;
+  border-radius:20px;
+  display:grid;place-items:center;
+  background:#fff4df;color:#b7791f;
+  font-size:34px;font-weight:950;
+}
+.maintenance-box h1{margin-bottom:10px;color:#11263b}
+.maintenance-box p{margin:0;color:#6b7280;line-height:1.65}
+
 </style>
 </head>
 <body>
@@ -236,6 +294,15 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
   </div>
 </section>
 
+<section id="maintenanceView" class="maintenance-screen hidden">
+  <div class="maintenance-box">
+    <div class="maintenance-symbol">!</div>
+    <h1>SISTEMA EM MANUTENÇÃO</h1>
+    <p>Estamos realizando ajustes no sistema.<br>Por favor, tente novamente em alguns minutos.</p>
+    <button class="btn light" id="maintenanceLogout" style="margin-top:22px">VOLTAR AO LOGIN</button>
+  </div>
+</section>
+
 <section id="sectorView" class="hidden">
   <header class="top">
     <div><div class="top-title">Hora Extra & Lanches</div><div class="top-sub"><span id="topSector"></span> • <span id="topDate"></span></div></div>
@@ -249,6 +316,21 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
         <div class="sector-deadline-text">CONFIRMAR NOMES ATÉ 15:45, POR FAVOR</div>
       </div>
     </div>
+    <div id="maintenanceControl" class="card maintenance-control hidden">
+      <div class="maintenance-row">
+        <div>
+          <div class="maintenance-state">
+            <span class="maintenance-dot"></span>
+            <span id="maintenanceStateText">SISTEMA LIBERADO</span>
+          </div>
+          <div id="maintenanceHelp" class="muted" style="margin-top:7px">
+            Ative a manutenção para bloquear temporariamente os demais acessos.
+          </div>
+        </div>
+        <button id="maintenanceBtn" class="btn danger">ATIVAR MANUTENÇÃO</button>
+      </div>
+    </div>
+
     <div class="card">
       <div class="head">
         <div><h2 id="sectorTitle"></h2><div class="muted">Informe quem ficará de hora extra e o lanche escolhido.</div></div>
@@ -372,7 +454,8 @@ const ACCESS = {
 const SECTORS = ["INGRESSO", "SEPARAÇÃO", "EXPEDIÇÃO", "ESPECIAL", "ADM"];
 const SNACKS = ["X FRANGO","X BACON","X CALABRESA","X SALADA","X EGG"];
 
-let db = null, auth = null, session = null, unsubscribeSector = null, unsubscribeRH = [];
+let db = null, auth = null, session = null, unsubscribeSector = null, unsubscribeRH = [], unsubscribeMaintenance = null;
+let maintenanceActive = false;
 let currentSectorItems = [], currentSectorFinalized = false, rhItems = [], rhFinalized = {};
 
 const $ = id => document.getElementById(id);
@@ -402,12 +485,13 @@ function joinNames(a){if(!a.length)return"";if(a.length===1)return a[0];if(a.len
 function slugName(s){return s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")}
 
 function show(view){
-  ["loginView","sectorView","rhView"].forEach(x=>$(x).classList.add("hidden"));
+  ["loginView","maintenanceView","sectorView","rhView"].forEach(x=>$(x).classList.add("hidden"));
   $(view).classList.remove("hidden");
 }
 function clearListeners(){
   if(unsubscribeSector){unsubscribeSector();unsubscribeSector=null}
   unsubscribeRH.forEach(fn=>fn&&fn()); unsubscribeRH=[];
+  if(unsubscribeMaintenance){unsubscribeMaintenance();unsubscribeMaintenance=null}
 }
 async function logout(){
   clearListeners();
@@ -427,7 +511,19 @@ $("loginBtn").onclick=async()=>{
   try{
     await signInWithEmailAndPassword(auth, access.email, access.authPassword);
     session=access;
+
+    const maintenanceSnap = await getDoc(doc(db,"configuracoes","manutencao"));
+    maintenanceActive = maintenanceSnap.exists() && maintenanceSnap.data().active === true;
+
+    const isMaintenanceADM = access.type==="sector" && access.sector==="ADM";
+    if(maintenanceActive && !isMaintenanceADM){
+      show("maintenanceView");
+      startMaintenanceWatcher();
+      return;
+    }
+
     access.type==="sector" ? openSector() : openRH();
+    startMaintenanceWatcher();
   }catch(e){
     console.error(e);
     $("loginError").textContent="Senha inválida ou conta não criada no Firebase Authentication.";
@@ -447,6 +543,12 @@ function openSector(){
   $("topSector").textContent=session.sector;
   $("topDate").textContent=`${dayName(date)} • ${fmt(date)}`;
   $("sectorTitle").textContent=session.sector;
+
+  const isMaintenanceADM = session.sector==="ADM";
+  $("maintenanceControl").classList.toggle("hidden",!isMaintenanceADM);
+  document.querySelector(".sector-deadline-alert").classList.toggle("hidden",isMaintenanceADM);
+  if(isMaintenanceADM) renderMaintenanceControl();
+
   $("sectorDate").textContent=fmt(date);
   $("sectorDay").textContent=dayName(date);
   listenSector();
@@ -571,6 +673,65 @@ $("reopenBtn").onclick=async()=>{
   const date=isoToday(),sector=session.sector;
   try{await setDoc(doc(db,"fechamentos",`${date}__${sector}`),{date,sector,finalized:false,updatedAt:serverTimestamp()},{merge:true});currentSectorFinalized=false;renderSector()}catch(e){alertFirestore(e)}
 };
+
+
+function isMaintenanceADM(){
+  return session?.type==="sector" && session?.sector==="ADM";
+}
+
+function renderMaintenanceControl(){
+  if(!isMaintenanceADM()) return;
+  const box=$("maintenanceControl");
+  box.classList.toggle("active",maintenanceActive);
+  $("maintenanceStateText").textContent=maintenanceActive?"MANUTENÇÃO ATIVA":"SISTEMA LIBERADO";
+  $("maintenanceHelp").textContent=maintenanceActive
+    ?"Os demais acessos estão bloqueados. O setor ADM continua liberado."
+    :"Ative a manutenção para bloquear temporariamente os demais acessos.";
+  $("maintenanceBtn").textContent=maintenanceActive?"FINALIZAR MANUTENÇÃO":"ATIVAR MANUTENÇÃO";
+  $("maintenanceBtn").className=`btn ${maintenanceActive?"success":"danger"}`;
+}
+
+function startMaintenanceWatcher(){
+  if(unsubscribeMaintenance) unsubscribeMaintenance();
+  unsubscribeMaintenance=onSnapshot(doc(db,"configuracoes","manutencao"),snap=>{
+    maintenanceActive=snap.exists() && snap.data().active===true;
+
+    if(isMaintenanceADM()){
+      renderMaintenanceControl();
+      return;
+    }
+
+    if(maintenanceActive && session){
+      if(unsubscribeSector){unsubscribeSector();unsubscribeSector=null}
+      unsubscribeRH.forEach(fn=>fn&&fn()); unsubscribeRH=[];
+      show("maintenanceView");
+    }else if(!maintenanceActive && session && !$("maintenanceView").classList.contains("hidden")){
+      session.type==="sector" ? openSector() : openRH();
+    }
+  },err=>console.error("Falha ao acompanhar manutenção:",err));
+}
+
+$("maintenanceBtn").onclick=async()=>{
+  if(!isMaintenanceADM()) return;
+
+  const next=!maintenanceActive;
+  const ok=confirm(next
+    ?"Ativar a manutenção agora? Os demais setores e o RH ficarão temporariamente bloqueados."
+    :"Finalizar a manutenção e liberar o sistema para todos?");
+  if(!ok) return;
+
+  try{
+    await setDoc(doc(db,"configuracoes","manutencao"),{
+      active:next,
+      updatedAt:serverTimestamp(),
+      updatedBy:"ADM"
+    },{merge:true});
+  }catch(e){
+    alertFirestore(e);
+  }
+};
+
+$("maintenanceLogout").onclick=logout;
 
 function openRH(){
   show("rhView");
