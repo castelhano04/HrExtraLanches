@@ -213,6 +213,26 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
 .maintenance-screen{min-height:100vh;display:grid;place-items:center;padding:24px}
 .maintenance-box{width:min(520px,100%);background:#fff;border:1px solid #e4e8ee;border-radius:24px;padding:38px 32px;text-align:center;box-shadow:var(--shadow)}
 .maintenance-symbol{width:68px;height:68px;margin:0 auto 18px;border-radius:20px;display:grid;place-items:center;background:#fff4df;color:#b7791f;font-size:34px;font-weight:950}
+
+    /* ===== FINANCEIRO RH / ADMIN MASTER ===== */
+    .finance-card{margin-top:18px;background:#fff;border:1px solid #dbe3ee;border-radius:16px;padding:18px;box-shadow:0 8px 24px rgba(15,23,42,.06)}
+    .finance-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px}
+    .finance-head h3{margin:0;font-size:18px}
+    .finance-head p{margin:4px 0 0;color:#64748b;font-size:13px}
+    .finance-table{width:100%;border-collapse:collapse;font-size:14px}
+    .finance-table th,.finance-table td{padding:10px 9px;border-bottom:1px solid #e5e7eb;text-align:left}
+    .finance-table th{background:#f8fafc;font-weight:800}
+    .finance-table td.num,.finance-table th.num{text-align:right}
+    .finance-total-row td{font-weight:900;background:#f8fafc}
+    .finance-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}
+    .finance-kpi{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#f8fafc}
+    .finance-kpi span{display:block;color:#64748b;font-size:12px;margin-bottom:4px}
+    .finance-kpi strong{font-size:18px}
+    .daily-costs{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px}
+    .daily-cost-chip{padding:8px 10px;border-radius:10px;background:#f1f5f9;border:1px solid #e2e8f0;font-size:13px}
+    .daily-cost-chip strong{display:block;margin-top:2px}
+    @media(max-width:720px){.finance-summary{grid-template-columns:1fr}.finance-table{font-size:12px}.finance-table th,.finance-table td{padding:8px 5px}}
+
 </style>
 </head>
 <body>
@@ -356,6 +376,38 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
     <div id="tabSectors" class="card hidden"><div class="head"><div><h2>Pedidos por setor</h2><div class="muted">Relação completa de nomes e lanches.</div></div></div><div id="sectorDetails"></div></div>
     <div id="tabHistory" class="card hidden"><div class="head"><div><h2>Histórico</h2><div class="muted">Dias já registrados no sistema.</div></div></div><div id="historyList"></div></div>
   </main>
+
+      <div id="financeCard" class="finance-card">
+        <div class="finance-head">
+          <div>
+            <h3>Resumo financeiro</h3>
+            <p>Visível somente para RH e ADMIN MASTER. Atualização automática conforme os pedidos.</p>
+          </div>
+        </div>
+
+        <div id="dailyCosts" class="daily-costs"></div>
+
+        <div style="overflow:auto">
+          <table class="finance-table">
+            <thead>
+              <tr>
+                <th>Lanche</th>
+                <th class="num">Qtd.</th>
+                <th class="num">Valor unit.</th>
+                <th class="num">Total</th>
+              </tr>
+            </thead>
+            <tbody id="financeBody"></tbody>
+          </table>
+        </div>
+
+        <div class="finance-summary">
+          <div class="finance-kpi"><span>Total dos lanches</span><strong id="snacksCost">R$ 0,00</strong></div>
+          <div class="finance-kpi"><span>Taxas de entrega</span><strong id="deliveryCost">R$ 0,00</strong></div>
+          <div class="finance-kpi"><span>Total geral</span><strong id="grandCost">R$ 0,00</strong></div>
+        </div>
+      </div>
+
 </section>
 
 <div id="offlineBadge" class="offline hidden">Sem conexão com o Firebase</div>
@@ -389,6 +441,102 @@ const firebaseConfig = {
   appId: "1:887399578505:web:f50f031ef0bb2d71a63f58",
   measurementId: "G-V5NDM9HHFS"
 };
+
+
+const SNACK_PRICES = Object.freeze({
+  "X FRANGO": 27.50,
+  "X BACON": 27.50,
+  "X CALABRESA": 27.50,
+  "X SALADA": 23.50,
+  "X EGG": 25.50
+});
+const DELIVERY_FEE = 15.00;
+
+function money(v){
+  return Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+}
+
+/*
+  O financeiro é DERIVADO dos pedidos reais, não de um contador separado.
+  Portanto adicionar, editar, trocar o lanche ou excluir recalcula tudo.
+  A taxa de R$ 15,00 é aplicada uma vez por data que tenha pelo menos 1 pedido.
+*/
+function calculateFinance(items){
+  const rows = Object.keys(SNACK_PRICES).map(snack=>({
+    snack, qty:0, unit:SNACK_PRICES[snack], total:0
+  }));
+  const bySnack = Object.fromEntries(rows.map(r=>[r.snack,r]));
+  const byDate = {};
+
+  (items||[]).forEach(item=>{
+    const snack = String(item.snack||"").toUpperCase().trim();
+    const date = item.date;
+    if(!bySnack[snack] || !date) return;
+    const effectivePrice = Number.isFinite(Number(item.unitPrice)) ? Number(item.unitPrice) : bySnack[snack].unit;
+    bySnack[snack].qty++;
+    bySnack[snack].total += effectivePrice;
+    if(!byDate[date]) byDate[date]={snacks:0,count:0};
+    byDate[date].snacks += effectivePrice;
+    byDate[date].count++;
+  });
+
+  const activeDates = Object.keys(byDate);
+  activeDates.forEach(date=>{
+    byDate[date].delivery = DELIVERY_FEE;
+    byDate[date].total = byDate[date].snacks + DELIVERY_FEE;
+  });
+
+  const snacksTotal = rows.reduce((s,r)=>s+r.total,0);
+  const deliveryTotal = activeDates.length * DELIVERY_FEE;
+  return {rows,byDate,snacksTotal,deliveryTotal,grandTotal:snacksTotal+deliveryTotal};
+}
+
+function brDate(iso){
+  if(!iso) return "";
+  const [y,m,d]=iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function renderFinance(items){
+  if(!session || (session.type!=="rh" && session.type!=="admin")) return;
+  const f=calculateFinance(items||[]);
+
+  const body=document.getElementById("financeBody");
+  if(body){
+    body.innerHTML=f.rows.map(r=>`
+      <tr>
+        <td><strong>${r.snack}</strong></td>
+        <td class="num">${r.qty}</td>
+        <td class="num">${money(r.unit)}</td>
+        <td class="num"><strong>${money(r.total)}</strong></td>
+      </tr>`).join("") + `
+      <tr class="finance-total-row">
+        <td>TOTAL DE LANCHES</td>
+        <td class="num">${f.rows.reduce((s,r)=>s+r.qty,0)}</td>
+        <td></td>
+        <td class="num">${money(f.snacksTotal)}</td>
+      </tr>`;
+  }
+
+  const daily=document.getElementById("dailyCosts");
+  if(daily){
+    const dates=Object.keys(f.byDate).sort();
+    daily.innerHTML=dates.length ? dates.map(date=>`
+      <div class="daily-cost-chip">
+        ${brDate(date)}
+        <strong>${money(f.byDate[date].total)}</strong>
+        <small>${f.byDate[date].count} lanche(s) + ${money(DELIVERY_FEE)} entrega</small>
+      </div>`).join("") :
+      `<div class="daily-cost-chip">Nenhum pedido no período.</div>`;
+  }
+
+  const a=document.getElementById("snacksCost");
+  const b=document.getElementById("deliveryCost");
+  const c=document.getElementById("grandCost");
+  if(a)a.textContent=money(f.snacksTotal);
+  if(b)b.textContent=money(f.deliveryTotal);
+  if(c)c.textContent=money(f.grandTotal);
+}
 
 const ACCESS = {
   "5824": {type:"sector", sector:"INGRESSO", email:"ingresso@hrextratrampo.com", authPassword:"Ig#7vP2mQ9!"},
@@ -571,7 +719,8 @@ async function editEmployee(id){
   renderSector();
   try{
     await setDoc(doc(db,"pedidos",id),{
-      date:item.date,sector:item.sector,name:newName,snack:newSnack,updatedAt:serverTimestamp()
+      date:item.date,sector:item.sector,name:newName,snack:newSnack,
+        unitPrice: SNACK_PRICES[String(newSnack).toUpperCase().trim()] ?? null,updatedAt:serverTimestamp()
     });
   }catch(e){
     currentSectorItems=currentSectorItems.map(x=>x.id===id?backup:x).sort((a,b)=>a.name.localeCompare(b.name,"pt-BR"));
@@ -668,6 +817,7 @@ function listenRH(){
   const q1=query(collection(db,"pedidos"),where("date","==",date));
   unsubscribeRH.push(onSnapshot(q1,snap=>{
     rhItems=snap.docs.map(d=>({id:d.id,...d.data()}));
+      renderFinance(rhItems);
     renderRH();
   },err=>alertFirestore(err)));
   const q2=query(collection(db,"fechamentos"),where("date","==",date));
