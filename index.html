@@ -289,6 +289,36 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
   #tabValues .daily-costs{grid-template-columns:1fr}
 }
 
+
+/* ===== FECHAMENTOS QUINZENAIS ===== */
+.closing-toolbar{display:flex;justify-content:space-between;align-items:end;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.closing-toolbar .field{margin:0;min-width:220px}
+.closing-month-total{background:linear-gradient(135deg,#173f68,#285f91);color:#fff;border-radius:16px;padding:14px 18px;min-width:220px}
+.closing-month-total span{display:block;font-size:10px;font-weight:800;letter-spacing:.08em;opacity:.8;text-transform:uppercase}
+.closing-month-total strong{display:block;font-size:24px;margin-top:4px}
+.closing-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:20px}
+.closing-card{background:#fff;border:1px solid #dce5ee;border-radius:18px;overflow:hidden;box-shadow:0 8px 24px rgba(15,42,68,.06)}
+.closing-card-head{padding:16px 18px;background:#f6f9fc;border-bottom:1px solid #e1e8ef}
+.closing-card-head strong{display:block;color:#173f68;font-size:17px}
+.closing-card-head span{display:block;color:#6b7b8c;font-size:12px;margin-top:4px}
+.closing-card-body{padding:16px 18px}
+.closing-mini-table{width:100%;border-collapse:collapse}
+.closing-mini-table th,.closing-mini-table td{padding:9px 6px;border-bottom:1px solid #edf1f5;font-size:12px}
+.closing-mini-table th{color:#718096;text-transform:uppercase;font-size:10px}
+.closing-mini-table td.num,.closing-mini-table th.num{text-align:right}
+.closing-totals{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:14px}
+.closing-total{background:#f8fafc;border:1px solid #e4eaf0;border-radius:12px;padding:11px}
+.closing-total span{display:block;color:#718096;font-size:10px;text-transform:uppercase;font-weight:800}
+.closing-total strong{display:block;color:#173f68;font-size:16px;margin-top:3px}
+.closing-total.grand{grid-column:1/-1;background:#eaf2f8;border-color:#cdddea}
+.closing-total.grand strong{font-size:21px}
+.closing-history{margin-top:20px}
+.closing-history-row{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr auto;gap:12px;align-items:center;padding:14px 15px;border:1px solid #e1e8ef;border-radius:13px;background:#fff;margin-bottom:9px}
+.closing-history-row .period{font-weight:900;color:#173f68}
+.closing-history-row small{display:block;color:#7b8997;margin-top:3px}
+.closing-history-row .money{font-weight:850;text-align:right}
+@media(max-width:820px){.closing-grid{grid-template-columns:1fr}.closing-history-row{grid-template-columns:1fr 1fr}.closing-history-row .period{grid-column:1/-1}.closing-history-row .money{text-align:left}}
+
 </style>
 </head>
 <body>
@@ -415,6 +445,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
       <button class="tab" data-tab="sectors">Por setor</button>
       <button class="tab" data-tab="history">Histórico</button>
       <button class="tab" data-tab="values">Valores</button>
+      <button class="tab" data-tab="closings">Fechamentos</button>
     </div>
 
     <div id="tabSummary" class="card">
@@ -464,6 +495,25 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:
         </div>
       </div>
     </div>
+
+    <div id="tabClosings" class="hidden">
+      <div class="card">
+        <div class="closing-toolbar">
+          <div>
+            <h2 style="margin-bottom:5px">Fechamentos quinzenais</h2>
+            <div class="muted">1º período: dias 01 a 15 • 2º período: dia 16 ao último dia do mês.</div>
+          </div>
+          <div class="field"><label>MÊS / ANO</label><input id="closingMonth" type="month"></div>
+          <div class="closing-month-total"><span>Total do mês</span><strong id="closingMonthTotal">R$ 0,00</strong></div>
+        </div>
+        <div id="closingGrid" class="closing-grid"></div>
+      </div>
+      <div class="card closing-history">
+        <div class="head"><div><h2>Histórico mensal de fechamentos</h2><div class="muted">Resumo financeiro mês a mês, calculado pelos pedidos reais.</div></div></div>
+        <div id="closingHistory"></div>
+      </div>
+    </div>
+
   </main>
 
       
@@ -511,6 +561,7 @@ const SNACK_PRICES = Object.freeze({
   "X EGG": 25.50
 });
 const DELIVERY_FEE = 15.00;
+const FINANCE_START_DATE = "2026-09-16";
 
 function money(v){
   return Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
@@ -532,6 +583,7 @@ function calculateFinance(items){
     const snack=String(item.snack||"").toUpperCase().trim();
     const date=item.date;
     if(!bySnack[snack] || !date) return;
+    if(date < FINANCE_START_DATE) return;
 
     // Registros antigos que ainda não têm unitPrice usam o preço atual.
     // Novos registros usam o preço salvo no próprio pedido.
@@ -616,6 +668,7 @@ function renderFinance(items){
 }
 
 let unsubscribeFinance=null;
+let allHistoricalItems=[];
 
 function listenFinanceHistory(){
   if(unsubscribeFinance){unsubscribeFinance();unsubscribeFinance=null;}
@@ -627,13 +680,86 @@ function listenFinanceHistory(){
   unsubscribeFinance=onSnapshot(
     collection(db,"pedidos"),
     snap=>{
-      const allHistoricalItems=snap.docs.map(d=>({id:d.id,...d.data()}));
+      allHistoricalItems=snap.docs.map(d=>({id:d.id,...d.data()}));
       renderFinance(allHistoricalItems);
+      renderClosings(allHistoricalItems);
     },
     err=>{
       console.error("Erro ao carregar histórico financeiro:",err);
     }
   );
+}
+
+
+function monthKeyFromDate(date){return String(date||"").slice(0,7)}
+function monthLabel(key){
+  if(!key)return "";
+  const [y,m]=key.split("-").map(Number);
+  return new Intl.DateTimeFormat("pt-BR",{month:"long",year:"numeric"}).format(new Date(y,m-1,1));
+}
+function lastDayOfMonth(key){
+  const [y,m]=key.split("-").map(Number);
+  return new Date(y,m,0).getDate();
+}
+function periodFinance(items,key,fromDay,toDay){
+  return calculateFinance((items||[]).filter(x=>{
+    if(!x.date || x.date < FINANCE_START_DATE)return false;
+    if(monthKeyFromDate(x.date)!==key)return false;
+    const d=Number(String(x.date).slice(8,10));
+    return d>=fromDay&&d<=toDay;
+  }));
+}
+function closingCard(title,range,f){
+  const qty=f.rows.reduce((s,r)=>s+r.qty,0);
+  const days=Object.keys(f.byDate).length;
+  const rows=f.rows.filter(r=>r.qty>0).map(r=>`
+    <tr><td>${r.snack}</td><td class="num">${r.qty}</td><td class="num">${money(r.total)}</td></tr>`).join("");
+  return `<div class="closing-card">
+    <div class="closing-card-head"><strong>${title}</strong><span>${range}</span></div>
+    <div class="closing-card-body">
+      <table class="closing-mini-table"><thead><tr><th>Lanche</th><th class="num">Qtd.</th><th class="num">Total</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="3" class="muted">Nenhum pedido neste período.</td></tr>'}</tbody></table>
+      <div class="closing-totals">
+        <div class="closing-total"><span>Lanches</span><strong>${qty}</strong></div>
+        <div class="closing-total"><span>Dias com pedido</span><strong>${days}</strong></div>
+        <div class="closing-total"><span>Valor dos lanches</span><strong>${money(f.snacksTotal)}</strong></div>
+        <div class="closing-total"><span>Entregas</span><strong>${money(f.deliveryTotal)}</strong></div>
+        <div class="closing-total grand"><span>Total do fechamento</span><strong>${money(f.grandTotal)}</strong></div>
+      </div>
+    </div></div>`;
+}
+function renderClosings(items){
+  if(!session||(session.type!=="rh"&&session.type!=="admin"))return;
+  const input=$("closingMonth");
+  if(!input)return;
+  if(!input.value)input.value=isoToday().slice(0,7);
+  const key=input.value,last=lastDayOfMonth(key);
+  const f1=periodFinance(items,key,1,15),f2=periodFinance(items,key,16,last);
+  const firstPeriodBeforeControl = key==="2026-09";
+  $("closingGrid").innerHTML=
+    (firstPeriodBeforeControl
+      ? `<div class="closing-card"><div class="closing-card-head"><strong>1º FECHAMENTO</strong><span>01/09/2026 a 15/09/2026</span></div><div class="closing-card-body"><div class="empty">Período anterior ao início do controle financeiro.<br><strong>Contagem iniciada em 16/09/2026.</strong></div></div></div>`
+      : closingCard("1º FECHAMENTO",`01/${key.slice(5,7)}/${key.slice(0,4)} a 15/${key.slice(5,7)}/${key.slice(0,4)}`,f1))+
+    closingCard("2º FECHAMENTO",`16/${key.slice(5,7)}/${key.slice(0,4)} a ${String(last).padStart(2,"0")}/${key.slice(5,7)}/${key.slice(0,4)}`,f2);
+  $("closingMonthTotal").textContent=money(f1.grandTotal+f2.grandTotal);
+
+  const months=[...new Set((items||[])
+    .filter(x=>x.date && x.date>=FINANCE_START_DATE)
+    .map(x=>monthKeyFromDate(x.date))
+    .filter(Boolean))].sort().reverse();
+  $("closingHistory").innerHTML=months.length?months.map(m=>{
+    const ld=lastDayOfMonth(m),a=periodFinance(items,m,1,15),b=periodFinance(items,m,16,ld),total=a.grandTotal+b.grandTotal;
+    return `<div class="closing-history-row">
+      <div class="period">${monthLabel(m)}<small>01 a 15 • 16 a ${ld}</small></div>
+      <div><small>1º fechamento</small><div class="money">${money(a.grandTotal)}</div></div>
+      <div><small>2º fechamento</small><div class="money">${money(b.grandTotal)}</div></div>
+      <div><small>Total mensal</small><div class="money">${money(total)}</div></div>
+      <button class="btn outline" data-closing-month="${m}">ABRIR</button>
+    </div>`;
+  }).join(""):'<div class="empty">Sem fechamentos no histórico.</div>';
+  $("closingHistory").querySelectorAll("[data-closing-month]").forEach(b=>b.onclick=()=>{
+    input.value=b.dataset.closingMonth;renderClosings(allHistoricalItems);scrollTo({top:0,behavior:"smooth"});
+  });
 }
 
 const ACCESS = {
@@ -910,6 +1036,7 @@ function openRH(){
   $("rhDate").value=isoToday();listenRH();listenFinanceHistory();
 }
 $("rhDate").onchange=listenRH;
+$("closingMonth").onchange=()=>renderClosings(allHistoricalItems);
 function listenRH(){
   clearRHListeners();
   const date=$("rhDate").value||isoToday();
@@ -1015,6 +1142,8 @@ function activateTab(tab){
   $("tabSectors").classList.toggle("hidden",tab!=="sectors");
   $("tabHistory").classList.toggle("hidden",tab!=="history");
   $("tabValues").classList.toggle("hidden",tab!=="values");
+  $("tabClosings").classList.toggle("hidden",tab!=="closings");
+  if(tab==="closings")renderClosings(allHistoricalItems);
 }
 function alertFirestore(e){
   console.error(e);
